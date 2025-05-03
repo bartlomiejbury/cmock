@@ -23,17 +23,20 @@ macro(generate_cmock)
     #############################
     #     Generate mocks
     #############################
-    execute_process(
-        COMMAND python3 ${CMOCK_ROOT_DIR}/src/mock.py list --headers ${UNIT_TEST_MOCKS} --output ${GENERATED_SOURCE_DIR}
-        OUTPUT_VARIABLE GENERATED_MOCKS
-    )
 
-    add_custom_command(
-        COMMAND python3 ${CMOCK_ROOT_DIR}/src/mock.py generate --headers ${UNIT_TEST_MOCKS} --output ${GENERATED_SOURCE_DIR}
-        OUTPUT ${GENERATED_MOCKS}
-        DEPENDS ${UNIT_TEST_MOCKS}
-        COMMENT "Generate mocks"
-    )
+    if (UNIT_TEST_MOCKS)
+        execute_process(
+            COMMAND python3 ${CMOCK_ROOT_DIR}/src/mock.py list --headers ${UNIT_TEST_MOCKS} --output ${GENERATED_SOURCE_DIR}
+            OUTPUT_VARIABLE GENERATED_MOCKS
+        )
+
+        add_custom_command(
+            COMMAND python3 ${CMOCK_ROOT_DIR}/src/mock.py generate --headers ${UNIT_TEST_MOCKS} --output ${GENERATED_SOURCE_DIR}
+            OUTPUT ${GENERATED_MOCKS}
+            DEPENDS ${UNIT_TEST_MOCKS}
+            COMMENT "Generate mocks"
+        )
+    endif()
 
     if(NOT GENERATED_MOCKS)
         message(STATUS "No mocks were generate create dummy file")
