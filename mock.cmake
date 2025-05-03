@@ -7,7 +7,7 @@ macro(generate_cmock)
 
     set(options "")
     set(oneValueArgs TARGET PROXY_DIR)
-    set(multivalueArgs MOCKS_DIR TARGET_SOURCES TARGET_INCLUDES TARGET_DEFINES)
+    set(multivalueArgs MOCKS_DIR)
 
     cmake_parse_arguments(MY_CHOICE "${options}" "${oneValueArgs}" "${multivalueArgs}" ${ARGN})
 
@@ -16,7 +16,7 @@ macro(generate_cmock)
     file(MAKE_DIRECTORY ${GENERATED_SOURCE_DIR})
 
     foreach(dir ${MY_CHOICE_MOCKS_DIR})
-        file(GLOB mocks "${dir}/*Mock.h")
+        file(GLOB mocks CONFIGURE_DEPENDS "${dir}/*Mock.h")
         list(APPEND UNIT_TEST_MOCKS ${mocks})
     endforeach()
 
@@ -36,7 +36,7 @@ macro(generate_cmock)
     )
 
     if(NOT GENERATED_MOCKS)
-        message(FATAL_ERROR "No mocks were generate create dummy file")
+        message(STATUS "No mocks were generate create dummy file")
         file(WRITE ${GENERATED_SOURCE_DIR}/dummy.cpp "")
         set(GENERATED_MOCKS ${GENERATED_SOURCE_DIR}/dummy.cpp)
     endif()
@@ -44,41 +44,47 @@ macro(generate_cmock)
     #############################
     #     Compile mocks
     #############################
-    add_library(${MY_CHOICE_TARGET}-mocks OBJECT EXCLUDE_FROM_ALL ${GENERATED_MOCKS})
-    target_include_directories(${MY_CHOICE_TARGET}-mocks
+
+    add_library(${MY_CHOICE_TARGET} OBJECT EXCLUDE_FROM_ALL ${GENERATED_MOCKS})
+    target_include_directories(${MY_CHOICE_TARGET}
         PUBLIC
         $<TARGET_PROPERTY:gmock,INCLUDE_DIRECTORIES>
         ${CMOCK_ROOT_DIR}/include
         ${MY_CHOICE_MOCKS_DIR}
-        ${MY_CHOICE_TARGET_INCLUDES}
-    )
-    target_compile_definitions(${MY_CHOICE_TARGET}-mocks PUBLIC ${MY_CHOICE_TARGET_DEFINES})
-
-    #############################
-    #     Compile sources
-    #############################
-    add_library(${MY_CHOICE_TARGET}-rerouted OBJECT EXCLUDE_FROM_ALL ${MY_CHOICE_TARGET_SOURCES})
-    target_include_directories(${MY_CHOICE_TARGET}-rerouted PUBLIC ${MY_CHOICE_TARGET_INCLUDES})
-    target_compile_definitions(${MY_CHOICE_TARGET}-rerouted PUBLIC ${MY_CHOICE_TARGET_DEFINES})
-
-    add_custom_target(${MY_CHOICE_TARGET}-reroute
-        COMMAND python3 ${CMOCK_ROOT_DIR}/src/mock.py reroute --objects $<TARGET_OBJECTS:${MY_CHOICE_TARGET}-rerouted> --mocks $<TARGET_OBJECTS:${MY_CHOICE_TARGET}-mocks>
-        DEPENDS ${MY_CHOICE_TARGET}-rerouted ${MY_CHOICE_TARGET}-mocks
-        COMMAND_EXPAND_LISTS
-        COMMENT "Reroute objects"
     )
 
-    #############################
-    #     Output library
-    #############################
-    add_library(${MY_CHOICE_TARGET} STATIC)
+endmacro()
 
-    target_link_libraries(${MY_CHOICE_TARGET}
+macro(reroute_target)
+
+    set(options "")
+    set(oneValueArgs TARGET CMOCK_TARGET)
+    set(multivalueArgs "")
+
+    cmake_parse_arguments(MY_CHOICE "${options}" "${oneValueArgs}" "${multivalueArgs}" ${ARGN})
+
+    #############################
+    #     Compile rerouted target
+    #############################
+    add_library(${MY_CHOICE_TARGET}-rerouted STATIC EXCLUDE_FROM_ALL $<TARGET_OBJECTS:${MY_CHOICE_TARGET}>)
+    target_include_directories(${MY_CHOICE_TARGET}-rerouted
         PUBLIC
-        ${MY_CHOICE_TARGET}-mocks
-        ${MY_CHOICE_TARGET}-rerouted
+        $<TARGET_PROPERTY:${MY_CHOICE_TARGET},INCLUDE_DIRECTORIES>
     )
-
-    add_dependencies(${MY_CHOICE_TARGET} ${MY_CHOICE_TARGET}-reroute)
+    target_compile_definitions(${MY_CHOICE_TARGET}-rerouted
+        PUBLIC
+        $<TARGET_PROPERTY:${MY_CHOICE_TARGET},COMPILE_DEFINITIONS>
+    )
+    target_link_libraries(${MY_CHOICE_TARGET}-rerouted
+        PRIVATE
+        $<TARGET_PROPERTY:${MY_CHOICE_TARGET},LINK_LIBRARIES>
+    )
+    add_custom_command(
+        TARGET ${MY_CHOICE_TARGET}-rerouted
+        PRE_BUILD
+        COMMAND python3 ${CMOCK_ROOT_DIR}/src/mock.py reroute --objects $<TARGET_OBJECTS:${MY_CHOICE_TARGET}> --mocks $<TARGET_OBJECTS:${MY_CHOICE_CMOCK_TARGET}>
+        COMMAND_EXPAND_LISTS
+        COMMENT "Reroute objects for ${MY_CHOICE_TARGET}"
+    )
 
 endmacro()
